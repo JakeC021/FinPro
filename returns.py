@@ -2,9 +2,53 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import yfinance as yf
 
 
 # Computer the log returns
+
+def get_historcial_data(tickers, start_date, end_date=None, interval='1wk'):
+    ticker_number = len(tickers.values())
+
+    hist_data = []
+    for ticker in tickers.values():
+        ticker = yf.Ticker(ticker)
+        # data_info.append(ticker.info)
+        hist_data.append(ticker.history(interval=interval,
+                         start=start_date, end=end_date))
+
+    # Make sure every dataset has the same length
+    # 1. Find the number of rows of shortest ticker data
+    dlen = []
+    for i in range(ticker_number):
+        dlen.append(len(hist_data[i]['Close']))
+    min_len = min(dlen)
+
+    # 2. Cut off any part that is longer than the shortest number.
+    hist_d = []
+    for i in range(ticker_number):
+        tlen = len(hist_data[i]['Close'])
+        hist_d.append(hist_data[i]['Close'][tlen-min_len:])
+
+    # Put historical data into one DataFrame
+    colName = list(tickers.keys())
+    idx = hist_d[0].index.date
+
+    df = pd.DataFrame(np.array(hist_d).T, columns=colName, index=idx)
+
+    return df
+
+
+def get_ticker_info(tickers):
+    data_info = []
+
+    for ticker in tickers.values():
+        ticker = yf.Ticker(ticker)
+        data_info.append(ticker.info)
+
+    df = pd.DataFrame(data_info, index=list(tickers.keys()))
+
+    return df
 
 
 def log_return(df, tickers):
