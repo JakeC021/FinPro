@@ -39,7 +39,7 @@ def MDD(df, tickers, idx=[], plot=False):
 
     # Line Plot Function
     def mdd_line_plot(df, mdddate, mdd, tickers):
-        plt.figure(figsize=(15, 8))
+        plt.figure(figsize=(15, 8), linewidth=2.0)
         plt.grid()
         ax = sns.lineplot(df)
 

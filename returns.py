@@ -6,202 +6,69 @@ import yfinance as yf
 
 
 # Computer the log returns
-
-def get_historcial_data(tickers, start_date, end_date=None, interval='1wk'):
+def get_hist_data(tickers, start_date, end_date=None, interval='1wk', original_data=False):
     ticker_number = len(tickers.values())
 
-    hist_data = []
-    for ticker in tickers.values():
-        ticker = yf.Ticker(ticker)
-        # data_info.append(ticker.info)
-        hist_data.append(ticker.history(interval=interval,
-                         start=start_date, end=end_date))
+    # 1. Store tickers' returns in Obj his_data
+    hist_data = {}
+    for key, value in tickers.items():
+        hist_data[key] = yf.Ticker(value).history(
+            interval=interval, start=start_date, end=end_date)
 
-    # Make sure every dataset has the same length
-    # 1. Find the number of rows of shortest ticker data
-    dlen = []
-    for i in range(ticker_number):
-        dlen.append(len(hist_data[i]['Close']))
-    min_len = min(dlen)
+    # 2. Make sure every dataset has the same length
+        # 2.1 Find the number of rows of shortest ticker data
+    datalength = []
+    for ele in hist_data.values():
+        datalength.append(len(ele['Close']))
 
-    # 2. Cut off any part that is longer than the shortest number.
-    hist_d = []
-    for i in range(ticker_number):
-        tlen = len(hist_data[i]['Close'])
-        hist_d.append(hist_data[i]['Close'][tlen-min_len:])
+    min_len = min(datalength)
 
-    # Put historical data into one DataFrame
-    colName = list(tickers.keys())
-    idx = hist_d[0].index.date
+    # 3. Retrive close data and put into dataframe
+    ticker_close_price = {}
+    for key, value in hist_data.items():
+        # Retrive Index of Date refences to the first ticker's index
+        if key == list(hist_data.keys())[0]:
+            global idx
+            idx = value['Close'][-min_len:].index.date
+        ticker_close_price[key] = list(value['Close'][-min_len:])
 
-    df = pd.DataFrame(np.array(hist_d).T, columns=colName, index=idx)
+    df = pd.DataFrame(ticker_close_price,
+                      columns=ticker_close_price.keys(),
+                      index=idx)
 
-    return df
+    if original_data == False:
+        return df
+    else:
+        return df, hist_data
 
 
 def get_ticker_info(tickers):
     data_info = []
 
     for ticker in tickers.values():
-        ticker = yf.Ticker(ticker)
-        data_info.append(ticker.info)
+        data_info.append(yf.Ticker(ticker).info)
 
     df = pd.DataFrame(data_info, index=list(tickers.keys()))
 
     return df
 
 
-def log_return(df, tickers):
-    for ticker in tickers.keys():
-        df[ticker+'_Ret'] = np.log(df[ticker]/df[ticker].shift(1))
+def log_return(df):
+    for col in df.columns:
+        if 'LogRets' not in col:
+            df[col+'_LogRets'] = np.log(df[col]/df[col].shift(1))
 
-    ret_cols = [col for col in df.columns if 'Ret' in col]
+    ret_cols = [col for col in df.columns if 'LogRets' in col]
 
     # Drop the row where the return value is nan
-    rIdx = df[df[ret_cols[0]].isna()].index
-    df.drop(index=rIdx, inplace=True)
+    rmIdx = df[df[ret_cols[0]].isna()].index
+    df.drop(index=rmIdx, inplace=True)
 
     return df
 
 
 def cum_return(df):
-    for col in [col for col in df.columns if 'Ret' in col and 'Cum' not in col]:
+    for col in [col for col in df.columns if 'LogRets' in col and 'Cum' not in col]:
         df[col+'_Cum'] = np.cumsum(df[col])
 
     return df
-
-
-def ret_line_plot(df, tickers):
-
-    for ticker in tickers.keys():
-        Max_Hist_Price = round(df[ticker].max(), 2)
-        Max_Hist_Price_Date = df[df[ticker] == df[ticker].max()].index[0]
-        Min_Hist_Price = round(df[ticker].min(), 2)
-        Min_Hist_Price_Date = df[df[ticker] == df[ticker].min()].index[0]
-        Max_Return = round(df[ticker+'_Ret'].max(), 2)
-        Max_Return_Date = df[df[ticker+'_Ret']
-                             == df[ticker+'_Ret'].max()].index[0]
-        Min_Return = round(df[ticker+'_Ret'].min(), 2)
-        Min_Return_Date = df[df[ticker+'_Ret']
-                             == df[ticker+'_Ret'].min()].index[0]
-
-        print('{0}: \n  Max_Hist_Price : {1} on {2}, Min_Hist_Price : {3} on {4} \n  Max_Return: {5} on {6}, Min_Return: {7} on {8} '.format(
-            ticker,
-            Max_Hist_Price,
-            Max_Hist_Price_Date,
-            Min_Hist_Price,
-            Min_Hist_Price_Date,
-            Max_Return,
-            Max_Return_Date,
-            Min_Return,
-            Min_Return_Date
-        )
-        )
-
-        ax = df.plot(y=ticker, legend=False, figsize=(10, 3), color='darkblue')
-        ax2 = ax.twinx()
-        df.plot(y=ticker+'_Ret', ax=ax2, legend=False, color="lightgreen")
-        ax.figure.legend()
-
-        # Annotation
-        # Max historical price
-        text = str(Max_Hist_Price_Date) + ',' + str(Max_Hist_Price)
-        x = df[df[ticker] == df[ticker].max()].index
-        y = df[ticker].max()
-        xytext = (x, y)
-        ax.annotate(
-            text,
-            xy=(x, y),
-            xytext=xytext,
-            color='red',
-            weight='bold',
-            arrowprops=dict(facecolor='red', shrink=0.01,
-                            headwidth=8, headlength=12),
-        )
-        # Min historical price
-        text = str(Min_Hist_Price_Date) + ',' + str(Min_Hist_Price)
-        x = df[df[ticker] == df[ticker].min()].index
-        y = df[ticker].min()
-        xytext = (x, y)
-        ax.annotate(
-            text,
-            xy=(x, y),
-            xytext=xytext,
-            color='red',
-            weight='bold',
-            arrowprops=dict(facecolor='red', shrink=0.01,
-                            headwidth=8, headlength=12),
-        )
-
-        # Max Return
-        text = str(Max_Return_Date) + ',' + str(Max_Return)
-        x = df[df[ticker+'_Ret'] == df[ticker+'_Ret'].max()].index
-        y = df[ticker+'_Ret'].max()
-        xytext = (x, y)
-        ax2.annotate(
-            text,
-            xy=(x, y),
-            xytext=xytext,
-            color='red',
-            weight='bold',
-            arrowprops=dict(facecolor='red', shrink=0.01,
-                            headwidth=8, headlength=12),
-        )
-        # Min Return
-        text = str(Min_Return_Date) + ',' + str(Min_Return)
-        x = df[df[ticker+'_Ret'] == df[ticker+'_Ret'].min()].index
-        y = df[ticker+'_Ret'].min()
-        xytext = (x, y)
-        ax2.annotate(
-            text,
-            xy=(x, y),
-            xytext=xytext,
-            color='red',
-            weight='bold',
-            arrowprops=dict(facecolor='red', shrink=0.01,
-                            headwidth=8, headlength=12),
-        )
-
-
-# Plot cumulative returns
-def cum_return_plot(df, palette=None):
-    plt.figure(figsize=(15, 8))
-    plt.grid()
-    d = df
-    ax = sns.lineplot(d, palette=palette)
-
-    # Annotations
-    for col in df.columns:
-        max_cum = df[col].max()
-        max_cum_date = df[df[col] == max_cum].index[0]
-        min_cum = df[col].min()
-        min_cum_date = df[df[col] == min_cum].index[0]
-
-        # Max Cum Return
-        text = '{0}, {1}%' .format(
-            str(max_cum_date), str(round(max_cum*100, 2)))
-        x = max_cum_date
-        y = max_cum
-        xytext = (x, y)
-        ax.annotate(
-            text,
-            xy=(x, y),
-            xytext=xytext,
-            color='green',
-            weight='bold',
-        )
-        # Min Cum Return
-        text = '{0}, {1}%' .format(
-            str(min_cum_date), str(round(min_cum*100, 2)))
-        x = min_cum_date
-        y = min_cum
-        xytext = (x, y)
-        ax.annotate(
-            text,
-            xy=(x, y),
-            xytext=xytext,
-            color='red',
-            # weight='bold',
-        )
-
-    plt.show()
